@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- F22.03: Google Play's web path to delete a Mafia Legacy account without the app (kuyruk §1.10 Q6). A static
+     page: Supabase Edge Functions do not serve HTML, so this page is hosted with the web site (F25.02) and calls the
+     `account` function. config.js (not in the repo; see config.example.js) names the project and its publishable key. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delete your Mafia Legacy account</title>
+  <style>
+    :root { color-scheme: dark; --bg: #121214; --card: #1e1e22; --ink: #f2efe8; --muted: #a8a49c; --gold: #f2c94c; --blood: #d64545; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 34rem; margin: 0 auto; padding: 2rem 1rem; }
+    h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+    section { background: var(--card); border: 1px solid #34343a; border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+    p { margin: .5rem 0; } .muted { color: var(--muted); font-size: .95rem; }
+    button { display: block; width: 100%; padding: .9rem; margin: .5rem 0; border-radius: 10px; border: 1px solid #55555c; background: #2a2a30; color: var(--ink); font-size: 1rem; cursor: pointer; }
+    button.danger { background: var(--blood); border-color: var(--blood); color: #fff; }
+    #done { color: var(--gold); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Delete your Mafia Legacy account</h1>
+  <section>
+    <p>This deletes your game, your place in your gang and your sign-in, for good. What you wrote in a gang's chat stays there without your name; reports you sent stay without it too.</p>
+    <p class="muted">A subscription is the store's: cancel it in the App Store or Google Play first, or it goes on.</p>
+    <p class="muted">Played as a guest and never linked an account? Delete it in the app (Settings › Account › Delete my account), or simply stop playing: a guest game nobody plays is deleted after 180 days.</p>
+  </section>
+  <section id="signin">
+    <p>Sign in with the account that keeps your game:</p>
+    <button data-provider="apple">Continue with Apple</button>
+    <button data-provider="google">Continue with Google</button>
+  </section>
+  <section id="confirm" hidden>
+    <p>Signed in. This cannot be undone.</p>
+    <button class="danger" id="delete">Yes, delete my account for good</button>
+  </section>
+  <p id="done" hidden></p>
+  <p class="muted">Questions: <a href="privacy.html">see the privacy policy</a>.</p>
+</main>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script>
+  const { url, key } = window.MAFIASAGA;
+  const client = supabase.createClient(url, key);
+  const show = (id, on) => { document.getElementById(id).hidden = !on; };
+  async function refresh() {
+    const { data } = await client.auth.getSession();
+    const signedIn = !!data.session && !data.session.user.is_anonymous;
+    show("signin", !signedIn);
+    show("confirm", signedIn);
+  }
+  document.querySelectorAll("[data-provider]").forEach((b) => b.addEventListener("click", () =>
+    client.auth.signInWithOAuth({ provider: b.dataset.provider, options: { redirectTo: location.href.split("#")[0] } })));
+  document.getElementById("delete").addEventListener("click", async () => {
+    const { data } = await client.auth.getSession();
+    const res = await fetch(`${url}/functions/v1/account`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: `Bearer ${data.session.access_token}`, apikey: key },
+      body: JSON.stringify({ action: "delete" }),
+    });
+    const answer = res.ok ? await res.json() : {};
+    await client.auth.signOut({ scope: "local" }).catch(() => {});
+    show("confirm", false);
+    show("signin", false);
+    const done = document.getElementById("done");
+    done.hidden = false;
+    done.textContent = answer.deleted ? "Your account and its game were deleted." : "The account could not be deleted. Try again, or write to support.";
+  });
+  refresh();
+</script>
+</body>
+</html>
